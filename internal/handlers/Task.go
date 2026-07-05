@@ -1,29 +1,17 @@
 package handlers
 
 import (
-	"focustracker/internal/models"
 	"net/http"
 	"strconv"
-	"time"
+
+	"focustracker/internal/models"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-type Handler struct {
-	DB *gorm.DB
-}
-
-func NewHandler(db *gorm.DB) *Handler {
-	return &Handler{DB: db}
-}
-
-const DefaultUserID = 1
-
 func (h *Handler) ListTasks(c *gin.Context) {
-	var tasks []models.Task
-	if err := h.DB.Where("user_id = ? AND is_archived = ?", DefaultUserID, false).
-		Find(&tasks).Error; err != nil {
+	tasks, err := h.TaskRepo.FindActiveByUser(DefaultUserID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -38,14 +26,10 @@ type CreateTaskRequest struct {
 
 func (h *Handler) CreateTask(c *gin.Context) {
 	var input CreateTaskRequest
-
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	if input.Frequency == "" {
 		input.Frequency = "daily"
 	}
@@ -56,66 +40,64 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		Description: input.Description,
 		Frequency:   input.Frequency,
 	}
-
-	if err := h.DB.Create(&task).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+	if err := h.TaskRepo.Create(&task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusCreated, task)
 }
 
-func (h *Handler) ToggleCompletion(c *gin.Context) {
+type UpdateTaskRequest struct {
+	Title       string `json:"title" binding:"required"`
+	Description string `json:"description"`
+	Frequency   string `json:"frequency"`
+}
+
+func (h *Handler) UpdateTask(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
 		return
 	}
 
-	var body struct {
-		Date string `json:"date"`
-	}
-
-	_ = c.ShouldBindJSON(&body)
-
-	dateStr := body.Date
-	if dateStr == "" {
-		dateStr = time.Now().Format("2006-01-02")
-	}
-
-	date, err := time.Parse("2006-01-02", dateStr)
+	task, err := h.TaskRepo.FindByID(uint(id))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "date must be YYYY-MM-DD"})
-		return
-	}
-
-	var existing models.Completion
-	err = h.DB.Where("task_id = ? AND date = ?", id, date).First(&existing).Error
-	if err == nil {
-		if err = h.DB.Delete(&existing).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"completed": false,
-		})
-		return
-	}
-
-	completion := models.Completion{
-		TaskID: uint(id),
-		Date:   date,
-	}
-
-	if err := h.DB.Create(&completion).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if task == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"completed": true,
-	})
+	var input UpdateTaskRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	task.Title = input.Title
+	task.Description = input.Description
+	if input.Frequency != "" {
+		task.Frequency = input.Frequency
+	}
+
+	if err := h.TaskRepo.Update(task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, task)
+}
+
+func (h *Handler) ArchiveTask(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+	if err := h.TaskRepo.Archive(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "archived"})
 }

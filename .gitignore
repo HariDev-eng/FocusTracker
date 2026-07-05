@@ -1,3 +1,16 @@
+/.env
+go.sum
+
+# Environment
 .env
-vcs.xml
-go.mod
+.env.*
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Logs
+*.log

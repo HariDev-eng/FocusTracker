@@ -3,7 +3,9 @@ package main
 import (
 	"focustracker/internal/handlers"
 	"focustracker/internal/models"
+	"focustracker/internal/repository"
 	"focustracker/internal/router"
+	service "focustracker/internal/services"
 	"log"
 
 	"focustracker/internal/config"
@@ -28,7 +30,12 @@ func main() {
 	log.Println("connected to database successfully")
 	_ = db
 
-	h := handlers.NewHandler(db)
+	taskRepo := repository.NewTaskRepository(db)
+	completionRepo := repository.NewCompletionRepository(db)
+	streakService := service.NewStreakService()
+	completionSvc := service.NewCompletionService(completionRepo)
+
+	h := handlers.NewHandler(taskRepo, completionRepo, streakService, completionSvc)
 	r := router.New(h)
 	log.Printf("server starting on port %s", cfg.Port)
 	err = r.Run(":" + cfg.Port)

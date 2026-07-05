@@ -16,6 +16,8 @@ func New(h *handlers.Handler) *gin.Engine {
 	r.GET("/api/tasks", h.ListTasks)
 	r.POST("/api/tasks", h.CreateTask)
 	r.POST("/api/tasks/:id/complete", h.ToggleCompletion)
+	r.PUT("/api/tasks/:id", h.UpdateTask)
+	r.DELETE("/api/tasks/:id", h.ArchiveTask)
 
 	return r
 }
